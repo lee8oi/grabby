@@ -13,8 +13,8 @@
 # http://www.gnu.org/licenses/
 ############################################
 #uncomment to enable local copy of http.tcl
-source "http.tcl"
-package require http 2.5.3
+#source "http.tcl"
+#package require http 2.5.3
 ############################################
 package require http
 package require tls
