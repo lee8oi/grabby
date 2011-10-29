@@ -33,6 +33,7 @@ puts "package version: [package provide http]"
 puts "running grabby"
 puts "encoding system: [encoding system]"
 proc grabby {url} {
+	set sysencoding [encoding system]
 	catch {set http [::http::geturl $url -timeout 60000]} error
 	if {[info exists http]} {
 		if { [::http::status $http] == "timeout" } {
@@ -52,22 +53,56 @@ proc grabby {url} {
 		puts "State url: $state(url)"
 		puts "State type: $state(type)"
 		puts "Document encoding: $state(charset)"
-		set data [::http::data $http]
+		set cleancharset [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]
+		#set cleancharset [string map -nocase {"iso8859-1" "latin1"} $cleancharset]
+		puts "Cleaned charset name: $cleancharset"
+		set data [::http::data [split $http]]
+		if {[regexp -nocase {"Content-Type" content=".*?; charset=(.*?)".*?>} $data - char]} {
+			#get charset from content type
+			puts "Charset from Content-Type: $char"
+			set char [string trim [string trim $char "\"' /"] {;}]
+			regexp {^(.*?)"} $char - char
+			set mset $char
+			if {![string length $char]} { set char "None Given" ; set char2 "None Given" }
+			set char2 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $char]]
+			puts "Charset after mapping: $char2"
+		} else {
+			if {[regexp -nocase {<meta content=".*?; charset=(.*?)".*?>} $data - char]} {
+				puts "charset from meta content: $char"
+				#get charset from meta content
+				set char [string trim $char "\"' /"]
+				regexp {^(.*?)"} $char - char
+				set mset $char
+				if {![string length $char]} { set char "None Given" ; set char2 "None Given" }
+				set char2 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $char]]
+				puts "charset after mapping: $char2"
+			} else {
+				puts "charset not found in content-type or meta-content"
+				set char "None Given" ; set char2 "None Given" ; set mset "None Given"
+			}
+		}
+		set char3 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]]
+		puts "char1: $char char2: $char2: char3: $char3"
+		if {![string equal -nocase $char2 $char3] && ![string equal -nocase "none given" $char2]} {
+			if {![string equal $char3 [encoding system]]} { set data [encoding convertto $char3 $data] }
+			if {![string equal $char2 [encoding system]]} { set data [encoding convertfrom $char2 $data] }
+			set char [string trim $char2 {;}]
+		} else {
+			# char sets are the same or char2 is 'none given'
+			set char [string trim $char3 {;}]
+		}																	
+
 		::http::cleanup $http
 		set title ""
 		if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
 			set output [string map { {href=} "" \" "" } $title]
-			if {[info exists meta(Location)]} {
-				return [::durltitle::urltitle $meta(Location)]
-			} else {
-				regsub -all -- {(?:<b>|</b>)} $output "\002" output
+			regsub -all -- {(?:<b>|</b>)} $output "\002" output
 				regsub -all -- {<.*?>} $output "" output
 				regsub -all -- {(?:<b>|</b>)} $output "\002" output
 				regsub -all -- {<.*?>} $output "" output
 				regsub -all \{ $output {\&ob;} output
 				regsub -all \} $output {\&cb;} output
 				puts "Title: [htmlparse::mapEscapes $output]"
-			}
 		}
 		return 1
 	} else {
