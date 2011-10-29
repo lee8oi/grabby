@@ -16,8 +16,10 @@
 #source "http.tcl"
 #package require http 2.5.3
 ############################################
+#
 package require http
 package require tls
+package require htmlparse
 ::http::register https 443 [list ::tls::socket -require 0 -request 1]
 set urls {
 	"http://www.google.com"
@@ -49,7 +51,23 @@ proc grabby {url} {
 		puts "State url: $state(url)"
 		puts "State type: $state(type)"
 		puts "Document encoding: $state(charset)"
+		set data [::http::data $http]
 		::http::cleanup $http
+		set title ""
+		if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
+			set output [string map { {href=} "" \" "" } $title]
+			if {[info exists meta(Location)]} {
+				return [::durltitle::urltitle $meta(Location)]
+			} else {
+				regsub -all -- {(?:<b>|</b>)} $output "\002" output
+				regsub -all -- {<.*?>} $output "" output
+				regsub -all -- {(?:<b>|</b>)} $output "\002" output
+				regsub -all -- {<.*?>} $output "" output
+				regsub -all \{ $output {\&ob;} output
+				regsub -all \} $output {\&cb;} output
+				puts "Title: [htmlparse::mapEscapes $output]"
+			}
+		}
 		return 1
 	} else {
 		puts "no http data found."
