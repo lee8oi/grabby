@@ -42,6 +42,7 @@ proc grabby {url} {
 		}
 		upvar #0 $http state
 		array set meta $state(meta)
+		puts "State url: $state(url)"
 		foreach {name value} $state(meta) {
 			if {[regexp -nocase ^location$ $name]} {
 				# Handle URL redirects
@@ -50,13 +51,12 @@ proc grabby {url} {
 				return 0
 			}
 		}
-		puts "State url: $state(url)"
 		puts "State type: $state(type)"
 		puts "Document encoding: $state(charset)"
 		set cleancharset [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]
 		#set cleancharset [string map -nocase {"iso8859-1" "latin1"} $cleancharset]
 		puts "Cleaned charset name: $cleancharset"
-		set data [::http::data [split $http]]
+		set data [::http::data $http]
 		if {[regexp -nocase {"Content-Type" content=".*?; charset=(.*?)".*?>} $data - char]} {
 			#get charset from content type
 			puts "Charset from Content-Type: $char"
@@ -82,16 +82,34 @@ proc grabby {url} {
 			}
 		}
 		set char3 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]]
-		puts "char1: $char char2: $char2: char3: $char3"
-		if {![string equal -nocase $char2 $char3] && ![string equal -nocase "none given" $char2]} {
-			if {![string equal $char3 [encoding system]]} { set data [encoding convertto $char3 $data] }
-			if {![string equal $char2 [encoding system]]} { set data [encoding convertfrom $char2 $data] }
-			set char [string trim $char2 {;}]
+		#puts "char1: $char char2: $char2: char3: $char3"
+		#if {![string equal -nocase $char2 $char3] && ![string equal -nocase "none given" $char2]} {
+		#	puts "charsets dont' match. char2 is: $char2"
+		#	#if {![string equal $char3 [encoding system]]} { set data [encoding convertto $char3 $data] }
+		#	if {[string equal -nocase $char2 [encoding system]] && } { set data [encoding convertfrom $char3 $data] }
+		#	set char [string trim $char2 {;}]
+		#} elseif {[string equal -nocase $char2 $char3] && $char2 != "none given"} {
+		#	# char sets are the same but are NOT "none given"
+		#	puts "charsets match: $char2"
+		#} else {
+		#	# char sets are the same or char2 is 'none given'
+		#	puts "charset ended up being: $char2"
+		#	set char [string trim $char3 {;}]
+		#}
+		if {![string equal -nocase $char2 $char3]} {
+			switch $char3 {
+				"iso8859-1" {
+					puts "ISO8859-1 DETECTED"
+					set data [encoding convertfrom $char2 $data]
+				}
+				default {
+					set data [encoding convertfrom $char3 $data]
+				}
+			}
 		} else {
-			# char sets are the same or char2 is 'none given'
-			set char [string trim $char3 {;}]
-		}																	
-
+			puts "Encodings match or are none given."
+			#set data [encoding convertto [encoding system] $data]
+		}
 		::http::cleanup $http
 		set title ""
 		if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
