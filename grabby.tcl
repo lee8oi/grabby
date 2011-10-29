@@ -31,6 +31,7 @@ set urls {
 }
 puts "package version: [package provide http]"
 puts "running grabby"
+puts "encoding system: [encoding system]"
 proc grabby {url} {
 	catch {set http [::http::geturl $url -timeout 60000]} error
 	if {[info exists http]} {
