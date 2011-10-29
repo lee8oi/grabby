@@ -88,12 +88,17 @@ proc grabby {url} {
 					puts "ISO8859-1 DETECTED"
 					set data [encoding convertfrom $char2 $data]
 				}
+				"utf-8" {
+					puts "UTF-8 DETECTED"
+				}
 				default {
-					set data [encoding convertfrom $char3 $data]
+					puts "Using default encoding method."
+					set data [encoding convertfrom $char2 $data]
 				}
 			}
 		} else {
 			puts "Encodings match or are none given."
+			
 			#set data [encoding convertto [encoding system] $data]
 		}
 		::http::cleanup $http
