@@ -136,7 +136,9 @@ proc grabby {url} {
 			}
 		} else {
 			puts "charsets match."
-			set data [encoding convertfrom $char3 $data]
+			if {[string match "2.5*" [package provide http]]} {
+				set data [encoding convertfrom $char3 $data]
+			}
 		}
 		::http::cleanup $http
 		set title [grabtitle $data]
