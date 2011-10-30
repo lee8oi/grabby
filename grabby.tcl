@@ -13,6 +13,7 @@
 # http://www.gnu.org/licenses/
 ############################################
 #uncomment to enable local copy of http.tcl
+#NOTE: This script is being developed for http 2.7.x mainly.
 #source "http.tcl"
 #package require http 2.5.3
 ############################################
@@ -22,7 +23,7 @@ package require tls
 package require htmlparse
 ::http::register https 443 ::tls::socket
 set urls {
-	"http://www.google.com"
+	"http://google.com"
 	"http://forum.egghelp.org/viewtopic.php?t=16819"
 	"http://fishki.net/comment.php?id=20554"
 	"http://www.nicovideo.jp/video_top"
@@ -32,6 +33,21 @@ set urls {
 puts "package version: [package provide http]"
 puts "running grabby"
 puts "encoding system: [encoding system]"
+
+proc grabtitle {data} {
+	if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
+		set output [string map { {href=} "" \" "" } $title]
+		regsub -all -- {(?:<b>|</b>)} $output "\002" output
+			regsub -all -- {<.*?>} $output "" output
+			regsub -all -- {(?:<b>|</b>)} $output "\002" output
+			regsub -all -- {<.*?>} $output "" output
+			regsub -all \{ $output {\&ob;} output
+			regsub -all \} $output {\&cb;} output
+			#puts "Title: [htmlparse::mapEscapes $output]"
+			return "[htmlparse::mapEscapes $output]"
+	}
+}
+
 proc grabby {url} {
 	set sysencoding [encoding system]
 	set ua "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.5) Gecko/2008120122 Firefox/3.0.5"
@@ -43,39 +59,33 @@ proc grabby {url} {
 			return 0
 		}
 		upvar #0 $http state
-		set redir [::http::ncode $http]
 		array set meta $state(meta)
-		puts "State url: $state(url)"
+		set url $state(url)
 		set data [::http::data $http]
-		set title ""
 		foreach {name value} $state(meta) {
 			# loop through meta info
-			puts "$name : $value"
+			#puts "$name : $value"
 			if {[regexp -nocase ^location$ $name]} {
 				set mapvar [list " " "%20"]
+				::http::cleanup $http
 				catch {set http [::http::geturl $value -timeout 60000]} error
 				if {![string match -nocase "::http::*" $error]} {
 					puts "No ::http::? [string totitle $error] \( $value \)"
-					return 0
+					return "http error: [string totitle $error] \( $value \)"
 				}
 				if {![string equal -nocase [::http::status $http] "ok"]} {
-					puts "status: [::http::status $http]"
-					puts "Not ok? [string totitle [::http::status $http]] \( $value \)"
-					return 0
+					#puts "status: [::http::status $http]"
+					return "status: [::http::status $http]"
 				}
-				set redir [::http::ncode $http]
 				set url [string map {" " "%20"} $value]
 				upvar #0 $http state
-				if {[incr r] > 10} { puts "redirect error (>10 too deep) \( $url \)" ; return }
-				
+				if {[incr r] > 10} { puts "redirect error (>10 too deep) \( $url \)" ; return 0}
+				set data [::http::data $http]
 			}
 		}
+		puts "Url: $url"
 		puts "State type: $state(type)"
 		puts "Document encoding: $state(charset)"
-		#set cleancharset [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]
-		#set cleancharset [string map -nocase {"iso8859-1" "latin1"} $cleancharset]
-		#puts "Cleaned charset name: $cleancharset"
-		set data [::http::data $http]
 		if {[regexp -nocase {"Content-Type" content=".*?; charset=(.*?)".*?>} $data - char]} {
 			#get charset from content type
 			puts "Charset from Content-Type: $char"
@@ -104,45 +114,37 @@ proc grabby {url} {
 		if {![string equal -nocase $char2 $char3]} {
 			switch $char3 {
 				"iso8859-1" {
-					puts "ISO8859-1 DETECTED"
-					set data [encoding convertfrom $char2 $data]
+					puts "iso8859-1 detected. Converting it as $char2"
+					if {[catch {set data [encoding convertfrom $char2 $data]} error]} {
+						puts "Error encoding from $char2. Trying $char3"
+						set data [encoding convertfrom $char3 $data]
+					}
 				}
 				"utf-8" {
-					puts "UTF-8 DETECTED"
+					puts "utf-8 detected. do nothing. for now."
 				}
 				default {
 					puts "Using default encoding method."
-					set data [encoding convertfrom $char2 $data]
+					if {[catch {[set data [encoding convertfrom $char2 $data]]} error]} {
+						puts "Error encoding from $char2. Changing to $char3"
+						set data [encoding convertfrom $char3 $data]
+					}
 				}
 			}
 		}
 		::http::cleanup $http
-		if {$title == ""} {
-			set title [grabtitle $data]
-		}
-		puts "Title: $title"
-		return 1
+		set title [grabtitle $data]
+		#puts "Title: $title"
+		return $title
 	} else {
 		puts "no http data found."
-		return 0
+		return "no title"
 	}
 	
 }
-proc grabtitle {data} {
-	if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
-		set output [string map { {href=} "" \" "" } $title]
-		regsub -all -- {(?:<b>|</b>)} $output "\002" output
-			regsub -all -- {<.*?>} $output "" output
-			regsub -all -- {(?:<b>|</b>)} $output "\002" output
-			regsub -all -- {<.*?>} $output "" output
-			regsub -all \{ $output {\&ob;} output
-			regsub -all \} $output {\&cb;} output
-			#puts "Title: [htmlparse::mapEscapes $output]"
-			return "[htmlparse::mapEscapes $output]"
-	}
-}
+
 foreach url $urls {
-	grabby $url
-	puts "End of $url information."
+	
+	puts "[grabby $url] @ \( $url \)"
 }
 
