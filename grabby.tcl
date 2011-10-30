@@ -14,11 +14,11 @@
 ############################################
 #uncomment to enable local copy of http.tcl
 #NOTE: This script is being developed for http 2.7.x mainly.
-#source "http.tcl"
-#package require http 2.5.3
+source "http.tcl"
+package require http 2.5.3
 ############################################
 #
-package require http
+#package require http
 package require tls
 package require htmlparse
 ::http::register https 443 ::tls::socket
@@ -111,8 +111,11 @@ proc grabby {url} {
 			}
 		}
 		set char3 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]]
+		puts "char3 is set to $char3"
 		if {![string equal -nocase $char2 $char3]} {
 			switch $char3 {
+				#switch section is primarily for future use. if certain charsets should be handled differently
+				#this is where we can change the behavior.
 				"iso8859-1" {
 					puts "iso8859-1 detected. Converting it as $char2"
 					if {[catch {set data [encoding convertfrom $char2 $data]} error]} {
@@ -131,6 +134,9 @@ proc grabby {url} {
 					}
 				}
 			}
+		} else {
+			puts "charsets match."
+			set data [encoding convertfrom $char3 $data]
 		}
 		::http::cleanup $http
 		set title [grabtitle $data]
