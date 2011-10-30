@@ -20,14 +20,14 @@
 package require http
 package require tls
 package require htmlparse
-::http::register https 443 [list ::tls::socket -require 0 -request 1]
+::http::register https 443 ::tls::socket
 set urls {
 	"http://www.google.com"
 	"http://forum.egghelp.org/viewtopic.php?t=16819"
 	"http://fishki.net/comment.php?id=20554"
 	"http://www.nicovideo.jp/video_top"
 	"http://www.duzheer.com/youqingwenzhang/"
-	"http://plus.google.com"
+	"https://plus.google.com"
 }
 puts "package version: [package provide http]"
 puts "running grabby"
@@ -48,35 +48,27 @@ proc grabby {url} {
 		puts "State url: $state(url)"
 		set data [::http::data $http]
 		set title ""
-		while {[string match "*${redir}*" "307|303|302|301" ]} {
-			# redirect code found.
-			set oldurl $state(url)
-			if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
-				set title [grabtitle $data]
-			}
-			foreach {name value} $state(meta) {
-				# loop through meta info
-				puts "$name : $value"
-				if {[regexp -nocase ^location$ $name]} {
-					set mapvar [list " " "%20"]
-					catch {set http [::http::geturl $value -timeout 60000]} error
-					if {![string match -nocase "::http::*" $error]} {
-						puts "No ::http::? [string totitle $error] \( $value \)"
-						return 0
-					}
-					if {![string equal -nocase [::http::status $http] "ok"]} {
-						puts "status: [::http::status $http]"
-						puts "Not ok? [string totitle [::http::status $http]] \( $value \)"
-						catch {set http [::http::geturl $oldurl -timeout 60000]} error
-						return 0
-					}
-					set redir [::http::ncode $http]
-					set url [string map {" " "%20"} $value]
-					upvar #0 $http state
-					if {[incr r] > 10} { puts "redirect error (>10 too deep) \( $url \)" ; return }
-					
+		foreach {name value} $state(meta) {
+			# loop through meta info
+			puts "$name : $value"
+			if {[regexp -nocase ^location$ $name]} {
+				set mapvar [list " " "%20"]
+				catch {set http [::http::geturl $value -timeout 60000]} error
+				if {![string match -nocase "::http::*" $error]} {
+					puts "No ::http::? [string totitle $error] \( $value \)"
+					return 0
 				}
-			} 
+				if {![string equal -nocase [::http::status $http] "ok"]} {
+					puts "status: [::http::status $http]"
+					puts "Not ok? [string totitle [::http::status $http]] \( $value \)"
+					return 0
+				}
+				set redir [::http::ncode $http]
+				set url [string map {" " "%20"} $value]
+				upvar #0 $http state
+				if {[incr r] > 10} { puts "redirect error (>10 too deep) \( $url \)" ; return }
+				
+			}
 		}
 		puts "State type: $state(type)"
 		puts "Document encoding: $state(charset)"
@@ -123,27 +115,12 @@ proc grabby {url} {
 					set data [encoding convertfrom $char2 $data]
 				}
 			}
-		} else {
-			puts "Encodings match or are none given."
-			
-			#set data [encoding convertto [encoding system] $data]
 		}
 		::http::cleanup $http
 		if {$title == ""} {
 			set title [grabtitle $data]
 		}
 		puts "Title: $title"
-		#set title ""
-		#if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
-		#	set output [string map { {href=} "" \" "" } $title]
-		#	regsub -all -- {(?:<b>|</b>)} $output "\002" output
-		#		regsub -all -- {<.*?>} $output "" output
-		#		regsub -all -- {(?:<b>|</b>)} $output "\002" output
-		#		regsub -all -- {<.*?>} $output "" output
-		#		regsub -all \{ $output {\&ob;} output
-		#		regsub -all \} $output {\&cb;} output
-		#		puts "Title: [htmlparse::mapEscapes $output]"
-		#}
 		return 1
 	} else {
 		puts "no http data found."
@@ -165,6 +142,7 @@ proc grabtitle {data} {
 	}
 }
 foreach url $urls {
-	puts "infor for $url: [grabby $url]"
+	grabby $url
+	puts "End of $url information."
 }
 
