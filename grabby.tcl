@@ -13,7 +13,7 @@
 # http://www.gnu.org/licenses/
 ############################################
 #uncomment to enable local copy of http.tcl
-#NOTE: This script is being developed for http 2.7.x mainly.
+#NOTE: This script works on http 2.5.3 and 2.7x.
 #source "http.tcl"
 #package require http 2.5.3
 ############################################
@@ -30,8 +30,6 @@ set urls {
 	"http://www.duzheer.com/youqingwenzhang/"
 	"https://plus.google.com"
 }
-puts "package version: [package provide http]"
-puts "encoding system: [encoding system]"
 
 proc grabtitle {data} {
 	if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
@@ -42,7 +40,6 @@ proc grabtitle {data} {
 			regsub -all -- {<.*?>} $output "" output
 			regsub -all \{ $output {\&ob;} output
 			regsub -all \} $output {\&cb;} output
-			#puts "Title: [htmlparse::mapEscapes $output]"
 			return "[htmlparse::mapEscapes $output]"
 	}
 }
