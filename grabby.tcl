@@ -34,6 +34,8 @@ puts "running grabby"
 puts "encoding system: [encoding system]"
 proc grabby {url} {
 	set sysencoding [encoding system]
+	set ua "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.5) Gecko/2008120122 Firefox/3.0.5"
+	set http [::http::config -useragent $ua]
 	catch {set http [::http::geturl $url -timeout 60000]} error
 	if {[info exists http]} {
 		if { [::http::status $http] == "timeout" } {
@@ -41,21 +43,46 @@ proc grabby {url} {
 			return 0
 		}
 		upvar #0 $http state
+		set redir [::http::ncode $http]
 		array set meta $state(meta)
 		puts "State url: $state(url)"
-		foreach {name value} $state(meta) {
-			if {[regexp -nocase ^location$ $name]} {
-				# Handle URL redirects
-				puts "redirect found: $value"
-				grabby $value
-				return 0
+		set data [::http::data $http]
+		set title ""
+		while {[string match "*${redir}*" "307|303|302|301" ]} {
+			# redirect code found.
+			set oldurl $state(url)
+			if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
+				set title [grabtitle $data]
 			}
+			foreach {name value} $state(meta) {
+				# loop through meta info
+				puts "$name : $value"
+				if {[regexp -nocase ^location$ $name]} {
+					set mapvar [list " " "%20"]
+					catch {set http [::http::geturl $value -timeout 60000]} error
+					if {![string match -nocase "::http::*" $error]} {
+						puts "No ::http::? [string totitle $error] \( $value \)"
+						return 0
+					}
+					if {![string equal -nocase [::http::status $http] "ok"]} {
+						puts "status: [::http::status $http]"
+						puts "Not ok? [string totitle [::http::status $http]] \( $value \)"
+						catch {set http [::http::geturl $oldurl -timeout 60000]} error
+						return 0
+					}
+					set redir [::http::ncode $http]
+					set url [string map {" " "%20"} $value]
+					upvar #0 $http state
+					if {[incr r] > 10} { puts "redirect error (>10 too deep) \( $url \)" ; return }
+					
+				}
+			} 
 		}
 		puts "State type: $state(type)"
 		puts "Document encoding: $state(charset)"
-		set cleancharset [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]
+		#set cleancharset [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]
 		#set cleancharset [string map -nocase {"iso8859-1" "latin1"} $cleancharset]
-		puts "Cleaned charset name: $cleancharset"
+		#puts "Cleaned charset name: $cleancharset"
 		set data [::http::data $http]
 		if {[regexp -nocase {"Content-Type" content=".*?; charset=(.*?)".*?>} $data - char]} {
 			#get charset from content type
@@ -102,23 +129,40 @@ proc grabby {url} {
 			#set data [encoding convertto [encoding system] $data]
 		}
 		::http::cleanup $http
-		set title ""
-		if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
-			set output [string map { {href=} "" \" "" } $title]
-			regsub -all -- {(?:<b>|</b>)} $output "\002" output
-				regsub -all -- {<.*?>} $output "" output
-				regsub -all -- {(?:<b>|</b>)} $output "\002" output
-				regsub -all -- {<.*?>} $output "" output
-				regsub -all \{ $output {\&ob;} output
-				regsub -all \} $output {\&cb;} output
-				puts "Title: [htmlparse::mapEscapes $output]"
+		if {$title == ""} {
+			set title [grabtitle $data]
 		}
+		puts "Title: $title"
+		#set title ""
+		#if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
+		#	set output [string map { {href=} "" \" "" } $title]
+		#	regsub -all -- {(?:<b>|</b>)} $output "\002" output
+		#		regsub -all -- {<.*?>} $output "" output
+		#		regsub -all -- {(?:<b>|</b>)} $output "\002" output
+		#		regsub -all -- {<.*?>} $output "" output
+		#		regsub -all \{ $output {\&ob;} output
+		#		regsub -all \} $output {\&cb;} output
+		#		puts "Title: [htmlparse::mapEscapes $output]"
+		#}
 		return 1
 	} else {
 		puts "no http data found."
 		return 0
 	}
 	
+}
+proc grabtitle {data} {
+	if {[regexp -nocase {<title>(.*?)</title>} $data match title]} {
+		set output [string map { {href=} "" \" "" } $title]
+		regsub -all -- {(?:<b>|</b>)} $output "\002" output
+			regsub -all -- {<.*?>} $output "" output
+			regsub -all -- {(?:<b>|</b>)} $output "\002" output
+			regsub -all -- {<.*?>} $output "" output
+			regsub -all \{ $output {\&ob;} output
+			regsub -all \} $output {\&cb;} output
+			#puts "Title: [htmlparse::mapEscapes $output]"
+			return "[htmlparse::mapEscapes $output]"
+	}
 }
 foreach url $urls {
 	puts "infor for $url: [grabby $url]"
