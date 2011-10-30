@@ -14,11 +14,11 @@
 ############################################
 #uncomment to enable local copy of http.tcl
 #NOTE: This script is being developed for http 2.7.x mainly.
-source "http.tcl"
-package require http 2.5.3
+#source "http.tcl"
+#package require http 2.5.3
 ############################################
 #
-#package require http
+package require http
 package require tls
 package require htmlparse
 ::http::register https 443 ::tls::socket
@@ -31,7 +31,6 @@ set urls {
 	"https://plus.google.com"
 }
 puts "package version: [package provide http]"
-puts "running grabby"
 puts "encoding system: [encoding system]"
 
 proc grabtitle {data} {
@@ -70,11 +69,9 @@ proc grabby {url} {
 				::http::cleanup $http
 				catch {set http [::http::geturl $value -timeout 60000]} error
 				if {![string match -nocase "::http::*" $error]} {
-					puts "No ::http::? [string totitle $error] \( $value \)"
 					return "http error: [string totitle $error] \( $value \)"
 				}
 				if {![string equal -nocase [::http::status $http] "ok"]} {
-					#puts "status: [::http::status $http]"
 					return "status: [::http::status $http]"
 				}
 				set url [string map {" " "%20"} $value]
@@ -83,7 +80,6 @@ proc grabby {url} {
 				set data [::http::data $http]
 			}
 		}
-		puts "Url: $url"
 		puts "State type: $state(type)"
 		puts "Document encoding: $state(charset)"
 		if {[regexp -nocase {"Content-Type" content=".*?; charset=(.*?)".*?>} $data - char]} {
@@ -91,40 +87,31 @@ proc grabby {url} {
 			puts "Charset from Content-Type: $char"
 			set char [string trim [string trim $char "\"' /"] {;}]
 			regexp {^(.*?)"} $char - char
-			set mset $char
 			if {![string length $char]} { set char "None Given" ; set char2 "None Given" }
 			set char2 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $char]]
-			puts "Charset after mapping: $char2"
+			puts "Mapped charset: $char2"
 		} else {
 			if {[regexp -nocase {<meta content=".*?; charset=(.*?)".*?>} $data - char]} {
 				puts "charset from meta content: $char"
 				#get charset from meta content
 				set char [string trim $char "\"' /"]
 				regexp {^(.*?)"} $char - char
-				set mset $char
 				if {![string length $char]} { set char "None Given" ; set char2 "None Given" }
 				set char2 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $char]]
-				puts "charset after mapping: $char2"
+				puts "Mapped charset: $char2"
 			} else {
 				puts "charset not found in content-type or meta-content"
 				set char "None Given" ; set char2 "None Given" ; set mset "None Given"
 			}
 		}
 		set char3 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]]
-		puts "char3 is set to $char3"
 		if {![string equal -nocase $char2 $char3]} {
-			switch $char3 {
-				#switch section is primarily for future use. if certain charsets should be handled differently
-				#this is where we can change the behavior.
-				"iso8859-1" {
-					puts "iso8859-1 detected. Converting it as $char2"
+			switch -regexp $char3 {
+				"iso8859*" {
 					if {[catch {set data [encoding convertfrom $char2 $data]} error]} {
 						puts "Error encoding from $char2. Trying $char3"
 						set data [encoding convertfrom $char3 $data]
 					}
-				}
-				"utf-8" {
-					puts "utf-8 detected. do nothing. for now."
 				}
 				default {
 					puts "Using default encoding method."
