@@ -48,7 +48,6 @@ proc grabtitle {data} {
 }
 
 proc grabby {url} {
-	set sysencoding [encoding system]
 	set ua "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.5) Gecko/2008120122 Firefox/3.0.5"
 	set http [::http::config -useragent $ua]
 	catch {set http [::http::geturl $url -timeout 60000]} error
@@ -62,8 +61,6 @@ proc grabby {url} {
 		set url $state(url)
 		set data [::http::data $http]
 		foreach {name value} $state(meta) {
-			# loop through meta info
-			#puts "$name : $value"
 			if {[regexp -nocase ^location$ $name]} {
 				set mapvar [list " " "%20"]
 				::http::cleanup $http
@@ -80,19 +77,14 @@ proc grabby {url} {
 				set data [::http::data $http]
 			}
 		}
-		puts "State type: $state(type)"
-		puts "Document encoding: $state(charset)"
 		if {[regexp -nocase {"Content-Type" content=".*?; charset=(.*?)".*?>} $data - char]} {
 			#get charset from content type
-			puts "Charset from Content-Type: $char"
 			set char [string trim [string trim $char "\"' /"] {;}]
 			regexp {^(.*?)"} $char - char
 			if {![string length $char]} { set char "None Given" ; set char2 "None Given" }
 			set char2 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $char]]
-			puts "Mapped charset: $char2"
 		} else {
 			if {[regexp -nocase {<meta content=".*?; charset=(.*?)".*?>} $data - char]} {
-				puts "charset from meta content: $char"
 				#get charset from meta content
 				set char [string trim $char "\"' /"]
 				regexp {^(.*?)"} $char - char
@@ -100,40 +92,24 @@ proc grabby {url} {
 				set char2 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $char]]
 				puts "Mapped charset: $char2"
 			} else {
-				puts "charset not found in content-type or meta-content"
 				set char "None Given" ; set char2 "None Given" ; set mset "None Given"
 			}
 		}
 		set char3 [string tolower [string map -nocase {"ISO-" "iso" "UTF-" "utf-" "iso-" "iso" "windows-" "cp" "shift_jis" "shiftjis"} $state(charset)]]
 		if {![string equal -nocase $char2 $char3]} {
-			switch -regexp $char3 {
-				"iso8859*" {
-					if {[catch {set data [encoding convertfrom $char2 $data]} error]} {
-						puts "Error encoding from $char2. Trying $char3"
-						set data [encoding convertfrom $char3 $data]
-					}
-				}
-				default {
-					puts "Using default encoding method."
-					if {[catch {[set data [encoding convertfrom $char2 $data]]} error]} {
-						puts "Error encoding from $char2. Changing to $char3"
-						set data [encoding convertfrom $char3 $data]
-					}
-				}
+			if {[catch {set data [encoding convertfrom $char2 $data]} error]} {
+				set data [encoding convertfrom $char3 $data]
 			}
 		} else {
-			puts "charsets match."
 			if {[string match "2.5*" [package provide http]]} {
 				set data [encoding convertfrom $char3 $data]
 			}
 		}
 		::http::cleanup $http
 		set title [grabtitle $data]
-		#puts "Title: $title"
 		return $title
 	} else {
-		puts "no http data found."
-		return "no title"
+		return "no data"
 	}
 	
 }
